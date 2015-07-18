@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="msapplication-tap-highlight" content="no" />
+        <!-- WARNING: for iOS 7, remove the width=device-width and height=device-height attributes. See https://issues.apache.org/jira/browse/CB-4323 -->
+        <meta name="viewport" content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width, height=device-height, target-densitydpi=device-dpi" />
+        <script type="text/javascript" src="cordova.js"></script>
+        <script type="text/javascript" src="js/jquery.js"></script>
+        <script type="text/javascript" src="js/polyfill.js"></script>
+        <script type="text/javascript" src="js/tinycolor.js"></script>
+
+        <script>
+            window.App = {queue: {}};
+
+            //document.addEventListener('deviceready', deviceReady);
+            window.addEventListener('WebComponentsReady', deviceReady);
+
+            function deviceReady(){
+                if(App.init) return;
+
+                App = {
+                    init: true,
+                    ready: false,
+                    queue: App.queue,
+                    proceed: function(){
+                        App.ready = true;
+                        for(key in App.queue){
+                            App.queue[key]();
+                        }
+                    },
+                    dialog: function(title, body, callback){
+                        if(typeof body === "string"){
+                            var p = document.createElement("p");
+                            p.innerText = body;
+                            body = p;
+                        }
+                        var dialog = new Dialog(title, body, callback);
+                        dialog.open();
+                    },
+                    toggleDrawer: function(){
+                        document.querySelector("paper-drawer-panel").togglePanel();
+                    },
+
+                    infoRequest: function(action, data, success, fail){
+                        if(action === "autocomplete"){
+                            if(data)
+                                $.getJSON("http://www.cumtd.com/autocomplete/Stops/v1.0/json/search?callback=?", {query: data})
+                                    .done(success || function(){})
+                                    .fail(fail || function(){});
+                            else
+                                success([]);
+                        }else{
+                            const KEY = "INSERT KEY HERE";
+                            data = data || {};
+                            data.key = KEY;
+                            $.ajax({
+                                type: "GET",
+                                url: "https://developer.cumtd.com/api/v2.2/json/" + action, 
+                                data: data,
+                                datatype: "json",
+                                crossDomain: true
+                            })
+                                .done(success || function(){})
+                                .fail(fail || function(){});
+                        }
+                    },
+                    createDelay: function(delay){
+                        var timerID = 0;
+                        return function(callback){
+                            clearTimeout(timerID);
+                            timerID = setTimeout(callback, delay);
+                        };
+                    },
+                    createAnimator: function(config, callback, done){
+                        if(typeof config !== "object") throw new TypeError("Arguement config expect an Object");
+
+                        var start = config.start,
+                            mid = $.extend({}, start),  //clone object
+                            math = $.extend({}, start),  //precalculate the math
+                            end = config.end,
+                            duration = config.duration || 1000,
+                            startTime, endTime;
+
+                        //t*(b-d)/(a-c) + (a*d-b*c)/(a-c);
+                        function precalculate(a,b,c,d){
+                            return [(b-d)/(a-c), (a*d-b*c)/(a-c)];
+                        }
+                        function calculate(key,t){
+                            return t*math[key][0] + math[key][1];
+                        }
+
+                        function step(){
+                            var t = Date.now();
+                            var val = end;
+                            if(t < endTime){
+                                val = mid;
+                                for(var key in mid){
+                                    mid[key] = calculate(key, t);
+                                }
+                                callback(val);
+                                requestAnimationFrame(step);
+                            }else{
+                                callback(val);
+                                done && done();
+                            }
+                        }
+                        
+                        return function(){
+                            startTime = Date.now();
+                            endTime = startTime + duration;
+
+                            for(var key in math){
+                                math[key] = precalculate(startTime, start[key], endTime, end[key]);
+                            }
+
+                            step();
+                        }
+                    },
+                    getStopById: function(id){
+                        var match = id.match(/^(\w+)(\:\d+)?$/);
+                        if(!match) throw new TypeError("Invalid stop id: \"" + id + "\"");
+                        return App.stops[match[1]];
+                    },
+                    cacheStops: function(){
+                        var cache = localStorage.stops;
+                        if(!cache || Date.now() - localStorage.stopsCacheTimeStamp > 7 * 24 * 60 * 60 * 1000){
+                            App.infoRequest("GetStops", {}, function(result){
+                                var lsCache = {},
+                                    stops = result.stops;
+                                stops.forEach(function(stop){
+                                    lsCache[stop.stop_id] = stop;
+
+                                    var avg_lat = 0, avg_lon = 0;
+                                    stop.stop_points.forEach(function(point){
+                                        avg_lat += point.stop_lat;
+                                        avg_lon += point.stop_lon;
+                                    });
+
+                                    stop.avg_lat = avg_lat / stop.stop_points.length;
+                                    stop.avg_lon = avg_lon / stop.stop_points.length;
+                                });
+
+                                localStorage.stops = JSON.stringify(lsCache);
+                                localStorage.stopsCacheTimeStamp = Date.now();
+
+                                App.stops = lsCache;
+                                App.proceed();
+                            });
+                        }else{
+                            App.stops = JSON.parse(cache);
+                            App.proceed();
+                        }
+                    },
+
+                    pages: {},  //filled in below
+                    currentPage: "main-page",
+                    goToPage: function(pageName, data, overrideSamePage){
+                        if(pageName === App.currentPage && !overrideSamePage) return;
+
+                        var page = App.pages[pageName];
+                        document.querySelector("neon-animated-pages").setAttribute("selected", page.index);
+
+                        if(typeof cordova !== "undefined"){
+                            setTimeout(function(){
+                                App.changeStatusBarColor( tinycolor(page.statusbarColor).toRgb() );
+                            }, 500);
+                        }
+                        document.querySelector("paper-drawer-panel").disableEdgeSwipe = !page.swipeToggleDrawer;
+                        App.currentPage = pageName;
+                        page.node.onSelect && page.node.onSelect(data);
+                    },
+                    changeStatusBarColor: (function(){
+                        var currentColor = tinycolor("#BDBDBD").toRgb();
+
+                        return function(rgb){
+                            if(currentColor.r == rgb.r && currentColor.g == rgb.g && currentColor.b == rgb.b) return;
+
+                            var animator = App.createAnimator({
+                                start: currentColor,
+                                end: rgb,
+                                duration: 200
+                            }, function(val){
+                                StatusBar.backgroundColorByHexString( tinycolor(val).toHexString() );
+                            });
+                            currentColor = $.extend({}, rgb);
+
+                            animator();
+                        };
+                    })(),
+
+                        /* desc 
+                           From http://wtp2.appspot.com/cSnapToRoute.js
+                           Static function. Find point on lines nearest test point
+                           test point pXy with properties .x and .y
+                           lines defined by array aXys with nodes having properties .x and .y 
+                           return is object with .x and .y properties and property i indicating nearest segment in aXys 
+                           and property fFrom the fractional distance of the returned point from aXy[i-1]
+                           and property fTo the fractional distance of the returned point from aXy[i]   */
+                    getClosestPointOnLines: function (pXy,aXys) {
+
+                        var minDist;       
+                        var fTo;
+                        var fFrom;
+                        var x;
+                        var y;
+                        var i;
+                        var dist;
+                            
+                        if (aXys.length > 1){
+                            
+                            for (var n = 1 ; n < aXys.length ; n++ ) {
+
+                                if (aXys[n].x != aXys[n-1].x) {
+                                    var a = (aXys[n].y - aXys[n-1].y) / (aXys[n].x - aXys[n-1].x);
+                                    var b = aXys[n].y - a * aXys[n].x;
+                                    dist = Math.abs(a*pXy.x + b - pXy.y) / Math.sqrt(a*a+1);
+                                }
+                                else 
+                                    dist = Math.abs(pXy.x - aXys[n].x)
+                                    
+                                // length^2 of line segment 
+                                var rl2 = Math.pow(aXys[n].y - aXys[n-1].y,2) + Math.pow(aXys[n].x - aXys[n-1].x,2);
+                                    
+                                // distance^2 of pt to end line segment
+                                var ln2 = Math.pow(aXys[n].y - pXy.y,2) + Math.pow(aXys[n].x - pXy.x,2);
+
+                                // distance^2 of pt to begin line segment
+                                var lnm12 = Math.pow(aXys[n-1].y - pXy.y,2) + Math.pow(aXys[n-1].x - pXy.x,2);
+
+                                // minimum distance^2 of pt to infinite line
+                                var dist2 = Math.pow(dist,2);
+                                    
+                                // calculated length^2 of line segment
+                                var calcrl2 = ln2 - dist2 + lnm12 - dist2;
+
+                                // redefine minimum distance to line segment (not infinite line) if necessary
+                                if (calcrl2 > rl2) 
+                                    dist = Math.sqrt( Math.min(ln2,lnm12) );                               
+                                    
+                                if ( (minDist == null) || (minDist > dist) ) {
+                                    if(calcrl2 > rl2){
+                                        if(lnm12 < ln2){
+                                            fTo = 0;//nearer to previous point
+                                            fFrom = 1;
+                                        }
+                                        else{
+                                            fFrom = 0;//nearer to current point
+                                            fTo = 1;
+                                        }
+                                    }
+                                    else {
+                                        // perpendicular from point intersects line segment
+                                        fTo  = ((Math.sqrt(lnm12 - dist2)) / Math.sqrt(rl2));
+                                        fFrom = ((Math.sqrt(ln2 - dist2))   / Math.sqrt(rl2));
+                                    }
+                                    minDist = dist;
+                                    i = n;               
+                                }    
+                            }
+                                
+                            var dx = aXys[i-1].x - aXys[i].x;
+                            var dy = aXys[i-1].y - aXys[i].y;
+
+                            x = aXys[i-1].x - (dx * fTo);
+                            y = aXys[i-1].y - (dy * fTo);
+
+                        }    
+
+                        return {'x':x, 'y':y, 'i':i, 'fTo':fTo, 'fFrom':fFrom};
+
+                    },
+                    TouchManager: function(ele, callback){
+                        var ele = ele,
+                            oriX = 0, oriY = 0,
+                            lastX = 0, lastY = 0,
+                            touching = false,
+                            eventObj = {
+                                dx: 0, dy: 0
+                            };
+
+                        callback = callback || function(){};
+
+                        ele.addEventListener("touchstart", function(e){
+                            oriX = e.touches[0].clientX;
+                            oriY = e.touches[0].clientY;
+                            lastX = e.touches[0].clientX;
+                            lastY = e.touches[0].clientY;
+                            touching = true;
+                            eventObj.state = "start";
+                            eventObj.dx = 0;
+                            eventObj.dy = 0;
+                            eventObj.originalEvent = e;
+
+                            callback(eventObj);
+                        });
+                        ele.addEventListener("touchmove", function(e){
+                            if(touching){
+                                eventObj.state = "track";
+                                eventObj.dx = e.touches[0].clientX - oriX;
+                                eventObj.dy = e.touches[0].clientY - oriY;
+                                eventObj.ddx = e.touches[0].clientX - lastX;
+                                eventObj.ddy = e.touches[0].clientY - lastY;
+
+                                lastX = e.touches[0].clientX;
+                                lastY = e.touches[0].clientY;
+                                callback(eventObj);
+                                eventObj.originalEvent = e;
+                            }
+                        });
+                        ele.addEventListener("touchend", function(e){
+                            touching = false;
+                            eventObj.state = "end";
+                            if(e.touches.length){
+                                eventObj.dx = e.touches[0].clientX - oriX;
+                                eventObj.dy = e.touches[0].clientY - oriY;
+                            }
+                            eventObj.originalEvent = e;
+                            callback(eventObj);
+                        });
+                    }
+                };
+
+                //Grab stop list from cache to reduce number of requests
+                App.cacheStops();
+
+                //Set up pages
+                var nodes = document.querySelectorAll("#pages > *");
+                for (var i = 0; i < nodes.length; i++){
+                    var node = nodes[i], tagName = node.tagName.toLowerCase();
+                    App.pages[tagName] = {
+                        node: node,
+                        name: tagName,
+                        index: i,
+                        statusbarColor: node.getAttribute("color") || "313f8c",
+                        swipeToggleDrawer: node.getAttribute("drawer") !== "false"
+                    };
+                };
+
+                //Set up back button behavior
+                document.addEventListener("backbutton", function(){
+                    var drawer = document.querySelector("paper-drawer-panel");
+                    if(drawer.selected == "drawer") return App.toggleDrawer();
+
+                    var node = App.pages[App.currentPage].node,
+                        behavior = node.onBackButton;
+                    behavior ? behavior.bind(node)() : navigator.app.exitApp();
+                });
+
+                //Set up menu events
+                document.querySelector("#menu").addEventListener("click", function(e){
+                    if(e.target.tagName === "PAPER-ITEM"){
+                        App.goToPage(e.target.getAttribute("page"));
+                        App.toggleDrawer();
+                    }
+                });
+
+                //Set up connectivity event
+                document.addEventListener("offline", function(e){
+                    App.dialog("You just went offline", "This app does not work without internet connectivity.");
+                })
+
+
+                //end
+                App.goToPage("main-page", {}, true);
+            }
+        </script>
+
+        <script src="bower_components/webcomponentsjs/webcomponents-lite.js"></script>
+        <link rel="import" href="bower_components/paper-drawer-panel/paper-drawer-panel.html">
+        <link rel="import" href="bower_components/paper-item/paper-item.html">
+        <link rel="import" href="bower_components/paper-menu/paper-menu.html">
+        <link rel="import" href="bower_components/neon-animation/neon-animated-pages.html">
+        <link rel="import" href="bower_components/neon-animation/neon-animations.html">
+
+        <link rel="import" href="bower_components/paper-material/paper-material.html">
+        <link rel="import" href="bower_components/paper-ripple/paper-ripple.html">
+
+
+        <link rel="import" href="custom-dialog.html">
+        <link rel="import" href="refresher.html">
+        <link rel="import" href="main-page.html">
+        <link rel="import" href="stop-page.html">
+        <link rel="import" href="search-page.html">
+
+        <link rel="stylesheet" type="text/css" href="css/index.css">
+        <style is="custom-style">
+            :root{
+                --main-background: #f9f9f9;
+            }
+            body{
+                background: var(--main-background);
+            }
+        </style>
+    </head>
+    <body class="fullbleed vertical">
+        <template is="dom-bind">
+            <paper-drawer-panel>
+                <div drawer>
+                    <paper-menu id="menu">
+                        <paper-item page="main-page">Arrivals</paper-item>
+                        <paper-item page="main-page">About</paper-item>
+                    </paper-menu>
+                </div>
+                <div main>
+                    <neon-animated-pages id="pages" selected="0">
+                        <main-page></main-page>
+                        <stop-page></stop-page>
+                        <search-page color="BDBDBD" drawer="false"></search-page>
+                    </neon-animated-pages>
+                </div>
+            </paper-drawer-panel>
+        </template>
+    </body>
+</html>

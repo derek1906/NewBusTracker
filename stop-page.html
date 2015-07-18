@@ -1,0 +1,480 @@
+<link rel="import" href="bower_components/polymer/polymer.html">
+
+<link rel="import" href="bower_components/paper-scroll-header-panel/paper-scroll-header-panel.html">
+<link rel="import" href="bower_components/iron-icons/iron-icons.html">
+<link rel="import" href="bower_components/iron-icons/av-icons.html">
+<link rel="import" href="bower_components/iron-icons/device-icons.html">
+<link rel="import" href="bower_components/iron-icons/image-icons.html">
+<link rel="import" href="bower_components/iron-icons/maps-icons.html">
+<link rel="import" href="bower_components/iron-pages/iron-pages.html">
+<link rel="import" href="bower_components/paper-toolbar/paper-toolbar.html">
+<link rel="import" href="bower_components/paper-tabs/paper-tabs.html">
+<link rel="import" href="bower_components/paper-material/paper-material.html">
+<link rel="import" href="bower_components/paper-ripple/paper-ripple.html">
+<link rel="import" href="bower_components/paper-item/paper-item.html">
+<link rel="import" href="bower_components/paper-item/paper-item-body.html">
+<link rel="import" href="bower_components/google-map/google-map.html">
+<link rel="import" href="bower_components/paper-fab/paper-fab.html">
+
+<link rel="import" href="refresher.html">
+
+<link rel="import" href="bower_components/neon-animation/neon-shared-element-animatable-behavior.html">
+
+<dom-module id="stop-page">
+	<style is="custom-style">
+
+		:host{
+			position: relative;
+			--paper-tab-ink: rgba(0,0,0,0.20);
+			--paper-tabs-selection-bar-color: #F44336;
+			--paper-fab-background: #F44336;
+		}
+
+		paper-scroll-header-panel{
+			width: 100%;
+			height: 100%
+		}
+
+		.title{
+		    font-size: 18px;
+		    /*height: 29px;*/
+		    z-index: 0;
+		}
+
+		paper-toolbar{
+			box-shadow: 0px 0px 10px #777;
+		}
+
+		.ellipsis{
+			text-overflow: ellipsis;
+			overflow: hidden;
+		}
+
+		.toolbarBackdrop{
+			position: absolute;
+			top: 0;
+			background: red;
+		}
+
+		#content{
+			--refresher-content: {
+				padding: 16px 16px 88px 16px;
+				background: var(--main-background);
+				min-height: 100%;
+				box-sizing: border-box;
+			};
+		}
+
+		#bookmarkFab{
+			position: fixed;
+			bottom: 15px;
+			right: 15px;
+		}
+
+		.tabsContainer{
+			width: 100%;
+			overflow: auto;
+			-webkit-overflow-scrolling: touch;
+		}
+
+		.tabsContainer > paper-tabs{
+			float: left;
+			padding: 0 8px;
+		}
+
+		paper-tabs, paper-toolbar {
+			color: #fff;
+		}
+
+		.pressable{
+			padding: 16px 16px;
+			border-top: 1px solid #EEE;
+			position: relative;
+			background: white;
+		}
+		.pressable .fullwidth{
+			margin-left: -16px;
+			margin-right: -16px;
+			padding-left: 16px;
+			padding-right: 16px;
+		}
+
+		.routeColor{
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 5px;
+			height: 100%;
+			z-index: 2;
+		}
+
+		.routeName{
+			font-size: 20px;
+		}
+
+		.istop{
+			height: 20px;
+		}
+
+		.tag{
+			font-size: 8px;
+			line-height: 8px;
+			border-radius: 3px;
+			text-transform: uppercase;
+			padding: 4px 5px;
+			margin-right: 5px;
+		}
+		.tag[data-type=normal]{
+			display: none;
+		}
+		.tag[data-type=hopper]{
+			background: #FFEA00;
+			color: black;
+		}
+		.tag[data-type=limited]{
+			background: #6D4C41;
+			color: white;
+		}
+		.tag[data-type=special]{
+			background: #0277BD;
+			color: white;
+		}
+
+		paper-item.departure{
+			margin: 0 -16px;
+			padding-left: 32px;
+		}
+
+		paper-item.departure .departureTime{
+			font-size: 20px;
+			/*line-height: 20px;*/
+		}
+
+		paper-item.departure .departureTimeMin{
+			font-size: 14px;
+			line-height: 14px;
+			margin-left: 3px;
+		}
+		paper-item.departure .departureTimeExpected{
+			font-size: 12px;
+			color: gray;
+			line-height: 12px;
+		}
+
+		.reroute{
+			margin-top: -8px;
+			padding-top: 8px;
+			padding-bottom: 8px;
+			font-size: 14px;
+			position: relative;
+		}
+		.reroute .rerouteTitle{
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.reroute iron-icon{
+			height: 14px;
+		}
+
+		#emptyPoint{
+			color: #555;
+		}
+		#emptyPoint > iron-icon{
+			height: 20px;
+			margin-right: 12px;
+		}
+	</style>
+	<template>
+		<paper-scroll-header-panel class="cyan" condenses>
+            <paper-toolbar class="tall tabbedToolbar">
+				<div id="toolbarStuff" class="layout horizontal center flex">
+	                <paper-icon-button icon="arrow-back" class="leftIcon" on-click="backToMain"></paper-icon-button>
+	                <span class="title">{{stop_name}}</span>
+	                <div class="flex"></div>
+	                <paper-icon-button icon="maps:map" on-click="openInMaps"></paper-icon-button>
+	            </div>
+	            <div class="tabsContainer bottom flex self-end">
+					<paper-tabs selected="{{stopPageIndex}}">
+						<template is="dom-repeat" items="{{stop_points}}">
+							<paper-tab>{{item.name}}</paper-tab>
+						</template>
+					</paper-tabs>
+				</div>
+            </paper-toolbar>
+            <refresher-module id="content">
+				<iron-pages selected="{{stopPageIndex}}">
+					<template is="dom-repeat" items="{{stop_points}}" as="point">
+						<div>
+							<paper-material>
+								<template is="dom-repeat" items="{{routeList}}" as="route" filter="{{isRouteInThisPoint(point)}}">
+									<div class="route pressable">
+										<div class="routeColor" style$="{{route.CSScolor}}"></div>
+										<template is="dom-if" if="{{route.reroute}}">
+											<div class="layout horizontal center fullwidth reroute">
+												<iron-icon icon="error-outline"></iron-icon>
+												<div class="flex rerouteTitle">{{route.reroute.brief}}</div>
+												<paper-ripple></paper-ripple>
+											</div>
+										</template>
+										<div class="layout horizontal center">
+											<span class="routeName">{{route.name}}</span>
+											<div class="flex"></div>
+											<template is="dom-if" if="{{route.is_istop}}">
+												<img src="img/iStop.png" class="istop" title="No fare needed!">
+											</template>
+										</div>
+										<template is="dom-repeat" items="{{departures}}" as="departure" filter="{{isDepartureInThisPointRoute(point, route)}}">
+											<paper-item style="position: relative;" class="departure">
+												<paper-item-body two-line>
+													<div class="layout horizontal center">
+														<template is="dom-if" if="{{isArriving(departure)}}">
+															<span class="departureTime">{{departure.expected_mins}}</span>
+															<span class="departureTimeMin self-end">min</span>
+														</template>
+														<template is="dom-if" if="{{isNotArriving(departure)}}">
+															<span class="departureTime">Arriving</span>
+														</template>
+														<div class="flex"></div>
+														<span class="tag" data-type$="{{departure.tag.type}}">{{departure.tag.text}}</span>
+														<span class="departureTimeExpected layout horizontal center">
+															<iron-icon icon="device:access-time" style="width: 12px; height: 12px;"></iron-icon>
+															<span>{{departure.expectedDepartureTime}}</span>
+														</span>
+													</div>
+													<span secondary class="layout horizontal center">
+														<span class="ellipsis">{{departure.origin_name}}</span>
+														<iron-icon icon="{{isRouteLoop(departure)}}" style="height: 17px"></iron-icon>
+														<span class="ellipsis">{{departure.destination_name}}</span>
+													</span>
+												</paper-item-body>
+												<paper-ripple></paper-ripple>
+											</paper-item>
+										</template>
+									</div>
+								</template>
+							</paper-material>
+							<template is="dom-if" if="{{point.isEmpty}}">
+								<paper-material class="pressable layout horizontal center" id="emptyPoint">
+									<iron-icon icon="image:nature-people"></iron-icon> Nothing is coming at this boarding point...
+									<paper-ripple></paper-ripple>
+								</paper-material>
+							</template>
+						</div>
+					</template>
+				</iron-pages>
+            </refresher-module>
+        </paper-scroll-header-panel>
+        <paper-fab icon="bookmark-border" id="bookmarkFab"></paper-fab>
+	</template>
+</dom-module>
+
+<script>
+	Polymer({
+		is: "stop-page",
+		behaviors: [
+			Polymer.NeonSharedElementAnimatableBehavior
+		],
+		properties: {},
+
+		backToMain: function(){
+			App.goToPage("main-page");
+		},
+
+		refreshData: function(){
+			this.onSelect(this.data);
+		},
+
+		openInMaps: function(){
+			window.open("geo:" + this.data.avg_lat + "," + this.data.avg_lon);
+		},
+
+		onSelect: function(data){
+			this.data = data;
+
+			this.stop_name = data.stop_name;
+
+			//Get departures info
+			App.infoRequest("GetDeparturesByStop", {stop_id: data.stop_id}, function(result){
+				this.departures = result.departures;
+
+				var routeList = {};
+				result.departures.forEach(function(departure){
+
+					//Set isEmpty for stop_points
+					this.set("stop_points." + this.stop_pointsIndexTable[departure.stop_id] + ".isEmpty", false);
+
+					//Build routeList
+					var routeName = departure.headsign.match(/^\d+\w [A-Z][a-z]+( Bus)?/)[0];
+					if(!routeList[routeName]){
+						routeList[routeName] = {
+							short_name: departure.route.route_short_name,
+							name: routeName,
+							color: departure.route.route_color,
+							CSScolor: "background: #" + departure.route.route_color + ";",
+							points: [departure.stop_id],
+							is_istop: departure.is_istop,
+							reroutes: {}
+						}
+					}else{
+						var route = routeList[routeName];
+						if(!~(route.points.indexOf(departure.stop_id))){
+							route.points.push(departure.stop_id);
+						}
+					}
+
+					//Build departures
+					var tagText = departure.headsign.match(/^\d+\w [A-Z][a-z]+( Bus)?\s?(.*)$/)[2].toLowerCase();
+					departure.tag = {
+						text: tagText,
+						type: !!~tagText.indexOf("hopper") ? "hopper" : tagText === "limited" ? "limited" : tagText === "" ? "normal" : "special"
+					};
+					departure.origin_name = App.getStopById(departure.origin.stop_id).stop_name;
+					departure.destination_name = App.getStopById(departure.destination.stop_id).stop_name;
+					var expectedDepartureTime = new Date(departure.expected);
+					departure.expectedDepartureTime = ("0" + expectedDepartureTime.getHours()).slice(-2) + ":" + ("0" + expectedDepartureTime.getMinutes()).slice(-2);
+				}.bind(this));
+
+				this.routeList = [];
+				for(var key in routeList){
+					this.push("routeList", routeList[key]);
+				}
+
+
+				//Fetch reroutes
+				App.infoRequest("GetReroutes", {}, function(result){
+					//Loop through all reroutes
+					var reroutes = result.reroutes.filter(function(reroute){
+							return Date.now() >= +new Date(reroute.start_date) && Date.now() <= +new Date(reroute.end_data);
+						});
+
+					this.routeList.forEach(function(route){
+						route.reroutes.list = [];
+
+						var short_name = route.short_name;
+						reroutes.filter(function(reroute){
+							return !!reroute.affected_routes.filter(function(affectedRoute){
+								return affectedRoute.route_short_name === short_name;
+							}).length;
+						}).forEach(function(reroute){
+							route.reroutes.list.push({
+								title: reroute.message,
+								message: reroute.description
+							});
+						});
+
+						if(route.reroutes.list.length){
+							route.reroute.brief = route.reroutes.list[0].title;
+						}
+					});
+				}.bind(this));
+
+				//Loading done
+				this.fire("stop-page-loading-done");
+			}.bind(this));
+
+			//Create tabs
+			this.stop_points = [];
+			this.stop_pointsIndexTable = {};
+			data.stop_points.forEach(function(point, i){
+				var name = point.stop_name,
+					actual_name = name.match(/^.+?\s\((.+?)\)$/);
+				this.push("stop_points", {
+					name: actual_name ? actual_name[1] : name,
+					stop_id: point.stop_id,
+					isEmpty: true
+				});
+				this.stop_pointsIndexTable[point.stop_id] = i;
+			}.bind(this));
+
+			this.stopPageIndex = 0;
+
+			//Create map
+			/*
+			var map = document.createElement("google-map"),
+			marker = document.createElement("google-map-marker");
+
+			map.latitude = data.avg_lat;
+			map.longitude = data.avg_lon;
+			marker.latitude = data.avg_lat;
+			marker.longitude = data.avg_lon;
+			map.disableDefaultUi = true;
+			map.draggable = false;
+			map.zoom = 16;
+			map.height = 300;
+			map.style.height = "300px";
+
+			Polymer.dom(map).appendChild(marker);
+			Polymer.dom(this.$.content).appendChild(map);
+			*/
+		},
+
+		onBackButton: function(){
+			this.backToMain();
+		},
+
+		ready: function ready(){
+			console.log("Stop page ready");
+
+			if(!App.ready){
+				App.queue["stop-page"] = function(){ ready.call(this); }.bind(this);
+				return;
+			}
+
+			var toolbarStyle = this.querySelector('#toolbarStuff').style,
+				refresher = this.querySelector("refresher-module");
+			window.addEventListener('paper-header-transform', function(e) {
+				var d = e.detail;
+				var m = d.height - d.condensedHeight;
+				//var scale = Math.max(0.75, (m - d.y) / (m / 0.25)  + 0.75);
+				//titleStyle.transform = titleStyle.webkitTransform = 'scale(' + scale + ') translateZ(0)';
+				var scale = -1/m * d.y + 1;
+				toolbarStyle.opacity = scale;
+
+				refresher.active = !d.y;
+			});
+
+			var refresherCallback = undefined;
+			this.$.content.addEventListener("refresher-done", function(e){
+				this.refreshData();
+				refresherCallback = e.detail.callback;
+				console.log("Refresh done", refresherCallback);
+			}.bind(this));
+			this.addEventListener("stop-page-loading-done", function(){
+				console.log("Stop page loading done");
+				refresherCallback && refresherCallback();
+			});
+		},
+
+
+		isDepartureInThisPointRoute: function(point, route){
+			return function(departure){
+				console.log(route, departure);
+				return	!!~ route.points.indexOf(departure.stop_id) &&
+				      	//departure.route.route_short_name === route.short_name;
+				      	departure.headsign.match(/^\d+\w [A-Z][a-z]+( Bus)?/)[0] == route.name;
+			};
+		},
+		isRouteInThisPoint: function(point){
+			return function(route){
+				console.log("ROUTE", point, route.points)
+				return !!~route.points.indexOf(point.stop_id);
+			};
+		},
+		isPointEmpty: function(point){
+			console.log("empty", this.routeList)
+			return !this.routeList || !this.routeList.filter(this.isRouteInThisPoint(point)).length;
+		},
+
+		isRouteLoop: function(departure){
+			return departure.origin.stop_id === departure.destination.stop_id ? "av:loop" : "arrow-forward";
+		},
+		isArriving: function(departure){
+			return !!departure.expected_mins;
+		},
+		isNotArriving: function(departure){
+			return !departure.expected_mins;
+		}
+
+	});
+</script>

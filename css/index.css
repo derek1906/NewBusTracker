@@ -1,0 +1,55 @@
+* {
+    -webkit-tap-highlight-color: rgba(0,0,0,0); /* make transparent link selection, adjust last value opacity 0 to 1.0 */
+    outline: none;
+}
+
+body {
+    -webkit-touch-callout: none;                /* prevent callout to copy image, etc when tap to hold */
+    -webkit-text-size-adjust: none;             /* prevent webkit from resizing text to fit */
+    -webkit-user-select: none;                  /* prevent copy paste, to allow, change 'none' to 'text' */
+    font-family: Roboto, Arial, sans-serif;
+}
+
+
+neon-animated-pages {
+    height: 100%;
+}
+
+.bold{
+    font-weight: bold;
+}
+
+paper-ripple {
+    -webkit-transition: background 0.2s linear;
+    -moz-transition: background 0.2s linear;
+    transition: background 0.2s linear;
+    color: rgba(0,0,0,0.20);
+    cursor: pointer;
+}
+
+paper-ripple:active {
+    background: rgba(0,0,0,0.1);
+}
+
+paper-material{
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+paper-drawer-panel > iron-selector:not(.narrow-layout) .drawerMenuIcon{
+    display: none;
+}
+
+paper-toolbar.tabbedToolbar #bottomBar{
+    padding: 0;
+}
+
+paper-toolbar paper-icon-button.leftIcon{
+    margin-left: -8px;
+    margin-right: 8px;
+}
+
+#content{
+    min-height: 100%;
+    box-sizing: border-box;
+}

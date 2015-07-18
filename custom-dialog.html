@@ -1,0 +1,49 @@
+<link rel="import" href="bower_components/polymer/polymer.html">
+
+<link rel="import" href="bower_components/paper-button/paper-button.html">
+<link rel="import" href="bower_components/paper-dialog/paper-dialog.html">
+<link rel="import" href="bower_components/paper-dialog-scrollable/paper-dialog-scrollable.html">
+
+<dom-module id="custom-dialog">
+	<style>
+        paper-dialog{
+            min-width: 80%;
+        }
+
+        #content{
+            padding: 0 24px;
+        }
+	</style>
+	<template>
+		<paper-dialog id="dialog" entry-animation="fade-in-animation" exit-animation="fade-out-animation">
+            <h2 id="title"></h2>
+            <paper-dialog-scrollable id="content"></paper-dialog-scrollable>
+            <div class="buttons">
+                <paper-button dialog-confirm>OK</paper-button>
+            </div>
+        </paper-dialog>
+	</template>
+</dom-module>
+
+<script>
+	Dialog = Polymer({
+		is: "custom-dialog",
+		factoryImpl: function(title, content, callback){
+            this.$.title.innerText = title;
+            this.$.content.appendChild(content);
+            document.body.appendChild(this.$.dialog);
+
+            if(callback) this.callback = callback;
+
+            this.$.dialog.addEventListener("iron-overlay-opened", function(){
+                this.callback();
+            }.bind(this));
+        },
+        open: function(){
+            this.$.dialog.style.top = "";
+            this.$.dialog.style.left = "";
+            this.$.dialog.open();
+        },
+        callback: function(){}
+	});
+</script>

@@ -1,0 +1,205 @@
+<link rel="import" href="bower_components/polymer/polymer.html">
+
+<link rel="import" href="bower_components/paper-scroll-header-panel/paper-scroll-header-panel.html">
+<link rel="import" href="bower_components/iron-icons/iron-icons.html">
+<link rel="import" href="bower_components/iron-icons/maps-icons.html">
+<link rel="import" href="bower_components/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="bower_components/paper-toolbar/paper-toolbar.html">
+<link rel="import" href="bower_components/paper-spinner/paper-spinner.html">
+<link rel="import" href="bower_components/paper-material/paper-material.html">
+<link rel="import" href="bower_components/paper-ripple/paper-ripple.html">
+<link rel="import" href="bower_components/iron-collapse/iron-collapse.html">
+<link rel="import" href="bower_components/google-map/google-map.html">
+
+<link rel="import" href="refresher.html">
+
+<link rel="import" href="bower_components/neon-animation/neon-shared-element-animatable-behavior.html">
+
+<dom-module id="main-page">
+	<style>
+		:host{
+			position: relative;
+		}
+
+		paper-scroll-header-panel{
+			width: 100%;
+			height: 100%
+		}
+
+		.title{
+		    font-size: 20px;
+		}
+
+		paper-toolbar{
+			box-shadow: 0px 0px 10px #777;
+		}
+
+		#content{
+			padding: 16px 0px;
+			background: var(--main-background);
+			min-height: 100%;
+			box-sizing: border-box;
+		}
+
+		#locationBased{
+			text-align: center;
+			background: white;
+		}
+		#locationBased .wrapper{
+			width: 100%;
+		}
+		#locationBased .wrapper > google-map{
+			height: 150px;
+			pointer-events: none;
+		}
+		#locationBased .wrapper > .mapText{
+			text-align: left;
+			padding-bottom: 8px;
+			font-size: 24px;
+		}
+
+		#locationBased .pressable{
+			padding: 16px 16px;
+			border-top: 1px solid #EEE;
+			position: relative;
+		}
+	</style>
+	<template>
+		<paper-scroll-header-panel class="cyan">
+            <paper-toolbar class="">
+                <paper-icon-button icon="menu" on-click="toggleDrawer" class="drawerMenuIcon leftIcon"></paper-icon-button>
+                <div class="flex title">Arrivals</div>
+                <paper-icon-button icon="maps:my-location" on-click="getLocation"></paper-icon-button>
+                <paper-icon-button icon="search" on-click="queryStop"></paper-icon-button>
+            </paper-toolbar>
+            <div id="content">
+                <paper-material elevation="1" id="locationBased">
+					<div class="pressable">
+						<div class="wrapper">
+							<p>Getting your location...</p><br>
+							<paper-spinner active></paper-spinner>
+						</div>
+						<paper-ripple recenters></paper-ripple>
+					</div>
+					<template is="dom-if" if="{{OtherPossibles.length}}">
+						<div class="pressable center horizontal layout bold" on-tap="toggleOtherPossibles">
+							<div class="flex"></div>
+							Nearby stops
+							<div class="flex"></div>
+							<iron-icon icon="expand-more" style="pointer-events: none;"></iron-icon>
+						</div>
+					</template>
+					<iron-collapse id="OtherPossibles">
+						<template is="dom-repeat" items="{{OtherPossibles}}" as="stop">
+							<div class="pressable center horizontal layout" on-click="OtherPossiblesOnClick">
+								<span>{{stop.stop_name}}</span>
+								<div class="flex"></div>
+								<iron-icon icon="arrow-forward"></iron-icon>
+								<paper-ripple></paper-ripple>
+							</div>
+						</template>
+					</iron-collapse>
+                </paper-material>
+            </div>
+        </paper-scroll-header-panel>
+	</template>
+</dom-module>
+
+<script>
+	Polymer({
+		is: "main-page",
+		behaviors: [
+			Polymer.NeonSharedElementAnimatableBehavior
+		],
+		properties: {},
+
+		toggleDrawer: function(){
+			App.toggleDrawer();
+		},
+		queryStop: function(){
+			App.goToPage("search-page");
+		},
+
+		ready: function ready(){
+			console.log("Main page ready");
+
+			if(!App.ready){
+				App.queue["main-page"] = function(){ ready.call(this); }.bind(this);
+				return;
+			}
+
+			navigator.geolocation.getCurrentPosition(function(position){
+				position = {
+					coords: {
+						latitude: 40.111556, longitude: -88.223923
+					}
+				};
+
+				App.infoRequest("GetStopsByLatLon", {lat: position.coords.latitude, lon: position.coords.longitude, count: 6}, function(result){
+					var targetStop = App.getStopById(result.stops[0].stop_id);
+
+					var div = document.createElement("div"),
+						map = document.createElement("google-map"),
+						marker = document.createElement("google-map-marker");
+					map.latitude = targetStop.avg_lat;
+					map.longitude = targetStop.avg_lon;
+					marker.latitude = targetStop.avg_lat;
+					marker.longitude = targetStop.avg_lon;
+					map.disableDefaultUi = true;
+					map.draggable = false;
+					map.zoom = 16;
+	
+					Polymer.dom(div).textContent = targetStop.stop_name;
+					Polymer.dom(div).classList.add("mapText");
+	
+					var card = Polymer.dom(this.$.locationBased).querySelector(".wrapper");
+					Polymer.dom(card).innerHTML = "";
+					Polymer.dom(card).appendChild(div);
+					Polymer.dom(card).appendChild(map);
+					Polymer.dom(map).appendChild(marker);
+
+					Polymer.dom(card).parentNode.addEventListener("click", function(){
+						App.goToPage("stop-page", targetStop);
+					});
+
+					this.OtherPossibles = [];
+
+					for(var i = 1; i < result.stops.length; i++){
+						this.push("OtherPossibles", result.stops[i]);
+					}
+
+				}.bind(this));
+			}.bind(this));
+		},
+
+		getLocation: function(){
+			var content = document.createElement("p"),
+				spinner = document.createElement("paper-spinner"),
+				responded = false;
+
+			spinner.active = true;
+
+			App.dialog("Location", content, function(){
+				if(!responded){
+					content.appendChild(spinner);
+					setTimeout(function(){
+						spinner.active = true;
+					}, 1000);
+				}
+			});
+
+			navigator.geolocation.getCurrentPosition(function(position){
+				responded = true;
+				content.innerHTML = position.coords.latitude + ", " + position.coords.longitude;
+			});
+		},
+		toggleOtherPossibles: function(e){
+			Polymer.dom(e.target).querySelector("iron-icon").setAttribute("icon", "expand-" + (this.$.OtherPossibles.opened ? "more":"less"));
+			this.$.OtherPossibles.toggle();
+		},
+		OtherPossiblesOnClick: function(e){
+			console.log(e);
+			App.goToPage("stop-page", App.getStopById(e.model.stop.stop_id));
+		}
+	});
+</script>

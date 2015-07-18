@@ -1,0 +1,139 @@
+<link rel="import" href="bower_components/polymer/polymer.html">
+
+<link rel="import" href="bower_components/paper-scroll-header-panel/paper-scroll-header-panel.html">
+<link rel="import" href="bower_components/iron-icons/iron-icons.html">
+<link rel="import" href="bower_components/paper-toolbar/paper-toolbar.html">
+<link rel="import" href="bower_components/paper-material/paper-material.html">
+<link rel="import" href="bower_components/paper-ripple/paper-ripple.html">
+<link rel="import" href="bower_components/paper-item/paper-item.html">
+<link rel="import" href="bower_components/paper-item/paper-item-body.html">
+<link rel="import" href="bower_components/paper-input/paper-input.html">
+
+<link rel="import" href="bower_components/neon-animation/neon-shared-element-animatable-behavior.html">
+
+<dom-module id="search-page">
+	<style is="custom-style">
+
+		:host{
+			position: relative;
+			--paper-tab-ink: rgba(0,0,0,0.20);
+			--paper-tabs-selection-bar-color: white;
+		}
+
+		paper-scroll-header-panel{
+			width: 100%;
+			height: 100%;
+		}
+
+		paper-scroll-header-panel paper-icon-button{
+			color: #616161;
+		}
+
+		.title{
+		    font-size: 24px;
+		    z-index: 0;
+		}
+
+		paper-toolbar{
+			box-shadow: 0px 0px 10px #777;
+			--paper-toolbar-background: white;
+		}
+
+		#searchBox{
+			width: 100%;
+			font-size: 18px;
+			border: 0px;
+		}
+
+		#content{
+			background: var(--main-background);
+		}
+
+		.pressable{
+			padding: 16px 16px;
+			border-top: 1px solid #EEE;
+			position: relative;
+			background: white;
+		}
+	</style>
+	<template>
+		<paper-scroll-header-panel condenses>
+            <paper-toolbar>
+				<div class="layout horizontal center" style="width: 100%;">
+	                <paper-icon-button icon="arrow-back" class="leftIcon" on-click="backToMain"></paper-icon-button>
+					<input id="searchBox" class="flex" placeholder="Search for stop names..." autofocus on-input="queryStops" on-keypress="handleKeypress">
+	            </div>
+            </paper-toolbar>
+            <div id="content" class="vertical fullbleed">
+				<!-- <paper-material> -->
+					<template is="dom-repeat" items="{{queryList}}" as="stop">
+						<div class="pressable layout horizontal center" on-click="goToStop">
+							<div>{{stop.n}}</div>
+							<div class="flex"></div>
+							<iron-icon icon="arrow-forward"></iron-icon>
+							<paper-ripple></paper-ripple>
+						</div>
+					</template>
+				<!-- </paper-material> -->
+            </div>
+        </paper-scroll-header-panel>
+	</template>
+</dom-module>
+
+<script>
+	Polymer({
+		is: "search-page",
+		behaviors: [
+			Polymer.NeonSharedElementAnimatableBehavior
+		],
+		properties: {},
+
+		backToMain: function(){
+			App.goToPage("main-page");
+		},
+
+		onSelect: function(){
+			this.$.searchBox.focus();
+			this.$.searchBox.value = "";
+			this.queryList = [];
+
+			// if(typeof cordova !== "undefined"){
+			//	StatusBar.backgroundColorByHexString("#BDBDBD");
+			// }
+		},
+
+		onBackButton: function(){
+			this.backToMain();
+		},
+
+		ready: function ready(){
+			console.log("Search page ready");
+
+			if(!App.ready){
+				App.queue["search-page"] = function(){ ready.call(this); }.bind(this);
+				return;
+			}
+
+			this.delayTimer = App.createDelay(200);
+		},
+
+		queryStops: function(e){
+			this.delayTimer(function(){
+				var query = e.target.value;
+				App.infoRequest("autocomplete", query, function(result){
+					this.set("queryList", result);
+				}.bind(this));
+			}.bind(this));
+		},
+		handleKeypress: function(e){
+			if(e.keyCode === 13 && this.queryList.length){
+				App.goToPage("stop-page", App.getStopById(this.queryList[0].i));
+			}
+		},
+
+		goToStop: function(e){
+			App.goToPage("stop-page", App.getStopById(e.model.stop.i));
+		}
+
+	});
+</script>

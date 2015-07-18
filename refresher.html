@@ -1,0 +1,160 @@
+<link rel="import" href="bower_components/polymer/polymer.html">
+
+<link rel="import" href="bower_components/paper-spinner/paper-spinner.html">
+<link rel="import" href="bower_components/paper-material/paper-material.html">
+<link rel="import" href="bower_components/iron-icons/iron-icons.html">
+
+<dom-module id="refresher-module">
+	<style>
+        :host{
+            overflow: hidden;
+        }
+
+        #contentWrapper{
+            @apply(--refresher-content);
+        }
+        #contentWrapper[data-dragging=true]{
+            touch-action: none !important;
+        }
+        #contentWrapper[data-dragging=false]{
+            touch-action: initial !important;
+        }
+
+        #spinnerWrapper{
+            width: 100%;
+            height: 0px;
+            position: relative;
+        }
+        #centerContainer{
+            width: 42px;
+            height: 42px;
+            margin: 0 auto;
+            position: relative;
+        }
+        #spinnerContainer{
+            position: absolute;
+            top: -42px;
+            left: 0;
+            z-index: 9;
+            width: 22px;
+            height: 22px;
+            background: white;
+            padding: 10px;
+            border-radius: 50%;
+            transform-origin: 50% 50%;
+            transform: translateY(0px) scale(0);
+        }
+        #spinner{
+            width: 22px;
+            height: 22px;
+        }
+	</style>
+	<template>
+        <div id="spinnerWrapper">
+            <div id="centerContainer">
+                <paper-material id="spinnerContainer">
+                    <!-- <paper-spinner id="spinner" active></paper-spinner> -->
+                    <iron-icon id="spinner" icon="refresh"></iron-icon>
+                </paper-material>
+            </div>
+        </div>
+        <div id="contentWrapper">
+            <content></content>
+        </div>
+	</template>
+</dom-module>
+
+<script>
+	Polymer({
+		is: "refresher-module",
+
+        properties: {
+            active: {
+                type: Boolean,
+                notify: true,
+                value: true
+            }
+        },
+
+        ready: function ready(){
+            if(!App.ready){
+                App.queue["refresher-module"] = function(){ ready.call(this); }.bind(this);
+                return;
+            }
+
+            App.TouchManager(this.$.contentWrapper, this.handleTrack.bind(this));
+        },
+
+        ongoing: false,  //loading
+        targetY: 50,
+        refreshing: true, //refresh potential
+        dy: 0,
+
+        handleTrack: function(e){
+            if(this.ongoing || !this.active) return;
+            console.log(e);
+            this.dy = this.easing(e.dy);
+            switch(e.state){
+                case "start":
+                    this.refreshing = true;  //assume yes
+                    break;
+                case "track":
+                    if(e.ddy < 0){
+                        console.log("Not refreshing");
+                        this.refreshing = false;  //not refreshing
+                    }else{
+                        this.$.spinnerContainer.style.transform = "translateY(" + this.dy + "px) scale(1)";
+                        break;
+                    }
+                case "end":
+                    //this.$.spinnerContainer.style.transform = "translateY(0px)";
+                    this.dragging = "false";
+                    if(this.dy >= this.targetY){
+                        //Refresh
+                        this.ongoing = true;
+                        App.createAnimator({
+                            start: {dy: this.dy},
+                            end: {dy: this.targetY},
+                            duration: 100
+                        }, function(val){
+                            this.$.spinnerContainer.style.transform = "translateY(" + val.dy + "px) scale(1)";
+                        }.bind(this), function(){
+                            this.fire("refresher-done", {
+                                callback: function(){
+                                    App.createAnimator({
+                                        start: {scale: 1},
+                                        end: {scale: 0},
+                                        duration: 100
+                                    }, function(val){
+                                        this.$.spinnerContainer.style.transform = "translateY(" + this.targetY + "px) scale(" + val.scale + ")";
+                                    }.bind(this), function(){
+                                        this.ongoing = false;
+                                        this.$.spinnerContainer.style.transform = "translateY(0px) scale(0)";
+                                    }.bind(this))();
+                                }.bind(this)
+                            });
+                        }.bind(this))();
+                    }else{
+                        //No refresh
+                        App.createAnimator({
+                            start: {dy: this.dy},
+                            end: {dy: 0},
+                            duration: 100
+                        }, function(val){
+                            this.$.spinnerContainer.style.transform = "translateY(" + val.dy + "px)";
+                        }.bind(this), function(){
+                            this.$.spinnerContainer.style.transform = "translateY(0px) scale(0)";
+                        }.bind(this))();
+                    }
+                    break;
+            }
+        },
+
+        easing: function(num){
+            var factor = 150;
+            num = Math.max(num, 0)
+            return factor/(num + factor) * num;
+        }
+
+	});
+</script>
